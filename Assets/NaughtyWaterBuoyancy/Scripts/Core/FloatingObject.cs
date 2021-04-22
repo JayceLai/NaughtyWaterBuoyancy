@@ -3,7 +3,6 @@ using UnityEngine;
 
 namespace NaughtyWaterBuoyancy
 {
-    [RequireComponent(typeof(Collider))]
     [RequireComponent(typeof(Rigidbody))]
     [RequireComponent(typeof(MeshFilter))]
     public class FloatingObject : MonoBehaviour
@@ -25,8 +24,9 @@ namespace NaughtyWaterBuoyancy
         private float angularDragInWater = 1f;
 
         private WaterVolume water;
-        private new Collider collider;
+        private List<Collider> colliders;
         private new Rigidbody rigidbody;
+        private Mesh mesh;
         private float initialDrag;
         private float initialAngularDrag;
         private Vector3 voxelSize;
@@ -34,15 +34,16 @@ namespace NaughtyWaterBuoyancy
 
         protected virtual void Awake()
         {
-            this.collider = this.GetComponent<Collider>();
+            this.colliders = new List<Collider>(this.GetComponentsInChildren<Collider>());
             this.rigidbody = this.GetComponent<Rigidbody>();
+            this.mesh = this.GetComponent<MeshFilter>().mesh;
 
             this.initialDrag = this.rigidbody.drag;
             this.initialAngularDrag = this.rigidbody.angularDrag;
 
             if (this.calculateDensity)
             {
-                float objectVolume = MathfUtils.CalculateVolume_Mesh(this.GetComponent<MeshFilter>().mesh, this.transform);
+                float objectVolume = MathfUtils.CalculateVolume_Mesh(this.mesh, this.transform);
                 this.density = this.rigidbody.mass / objectVolume;
             }
         }
@@ -52,14 +53,14 @@ namespace NaughtyWaterBuoyancy
             if (this.water != null && this.voxels.Length > 0)
             {
                 Vector3 forceAtSingleVoxel = this.CalculateMaxBuoyancyForce() / this.voxels.Length;
-                Bounds bounds = this.collider.bounds;
+                Bounds bounds = this.colliders[0].bounds;
                 float voxelHeight = bounds.size.y * this.normalizedVoxelSize;
 
                 float submergedVolume = 0f;
                 for (int i = 0; i < this.voxels.Length; i++)
                 {
                     Vector3 worldPoint = this.transform.TransformPoint(this.voxels[i]);
-                    
+
                     float waterLevel = this.water.GetWaterLevel(worldPoint);
                     float deepLevel = waterLevel - worldPoint.y + (voxelHeight / 2f); // How deep is the voxel                    
                     float submergedFactor = Mathf.Clamp(deepLevel / voxelHeight, 0f, 1f); // 0 - voxel is fully out of the water, 1 - voxel is fully submerged
@@ -116,7 +117,7 @@ namespace NaughtyWaterBuoyancy
 
         private Vector3 CalculateMaxBuoyancyForce()
         {
-            float objectVolume = this.rigidbody.mass  / this.density;
+            float objectVolume = this.rigidbody.mass / this.density;
             Vector3 maxBuoyancyForce = this.water.Density * objectVolume * -Physics.gravity;
 
             return maxBuoyancyForce;
@@ -127,7 +128,7 @@ namespace NaughtyWaterBuoyancy
             Quaternion initialRotation = this.transform.rotation;
             this.transform.rotation = Quaternion.identity;
 
-            Bounds bounds = this.collider.bounds;
+            Bounds bounds = this.colliders[0].bounds;
             this.voxelSize.x = bounds.size.x * this.normalizedVoxelSize;
             this.voxelSize.y = bounds.size.y * this.normalizedVoxelSize;
             this.voxelSize.z = bounds.size.z * this.normalizedVoxelSize;
@@ -145,9 +146,18 @@ namespace NaughtyWaterBuoyancy
                         float pZ = bounds.min.z + this.voxelSize.z * (0.5f + k);
 
                         Vector3 point = new Vector3(pX, pY, pZ);
-                        if (ColliderUtils.IsPointInsideCollider(point, this.collider, ref bounds))
+                        // for (int c = 0; c < this.colliders.Count; c++)
+                        // {
+                        //     if (ColliderUtils.IsPointInsideCollider(point, this.colliders[c], ref bounds))
+                        //     {
+                        //         voxels.Add(this.transform.InverseTransformPoint(point));
+                        //         break;
+                        //     }
+                        // }
+                        if (ColliderUtils.IsPointInsideCollider(point, this.colliders[0], ref bounds))
                         {
                             voxels.Add(this.transform.InverseTransformPoint(point));
+                            break;
                         }
                     }
                 }
